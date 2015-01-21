@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 
+import errno
 import os
 import socket
 import struct
@@ -16,12 +17,14 @@ _STATE_LISTEN = '0A'
 
 _NETSTAT_FILES_TCP = ['/proc/net/tcp', '/proc/net/tcp6']
 
+
 def _signalByName(name):
     try:
         return int(name)
     except ValueError:
         pass
-    signames = dict((k, v) for k,v in signal.__dict__.items() if k.startswith('SIG'))
+    signames = dict(
+        (k, v) for k, v in signal.__dict__.items() if k.startswith('SIG'))
     if name in signames:
         return signames[name]
     sname = 'SIG_' + name
@@ -32,31 +35,35 @@ def _signalByName(name):
         return signames[sname]
     raise ValueError('Cannot find signal ' + str(name))
 
+
 def _parseIpPort(kernelStr):
-    ipStr,_,portStr = kernelStr.partition(':')
+    ipStr, _, portStr = kernelStr.partition(':')
     port = int(portStr, 16)
     ipInt = int(ipStr, 16)
-    if len(ipStr) == 8: # IPv4
+    if len(ipStr) == 8:  # IPv4
         ip = socket.inet_ntop(socket.AF_INET, struct.pack('=I', ipInt))
-    else: # IPv6
-        ip = socket.inet_ntop(socket.AF_INET6, struct.pack('=IIII',
+    else:  # IPv6
+        ip = socket.inet_ntop(socket.AF_INET6, struct.pack(
+            '=IIII',
             ((ipInt >> 96) & 0xffffffff),
             ((ipInt >> 64) & 0xffffffff),
             ((ipInt >> 32) & 0xffffffff),
             ((ipInt >> 0) & 0xffffffff)
         ))
-    return ip,port
+    return (ip, port)
 
-class NoProcessException(Exception):
+
+class NoProcessException(BaseException):
     def __init__(self, msg):
         super(NoProcessException, self).__init__()
         self.msg = msg
+
 
 def _get_open_ports(sourceFiles=_NETSTAT_FILES_TCP):
     for sfn in sourceFiles:
         with open(sfn) as sf:
             proto = os.path.basename(sfn)
-            next(sf) # Skip header line
+            next(sf)  # Skip header line
 
             for line in sf:
                 entries = line.split()
@@ -65,7 +72,7 @@ def _get_open_ports(sourceFiles=_NETSTAT_FILES_TCP):
                 if state != _STATE_LISTEN:
                     continue
 
-                local_ip,local_port = _parseIpPort(entries[1])
+                local_ip, local_port = _parseIpPort(entries[1])
 
                 yield {
                     'proto': proto,
@@ -73,6 +80,7 @@ def _get_open_ports(sourceFiles=_NETSTAT_FILES_TCP):
                     'local_address': local_ip,
                     'sockId': sockId,
                 }
+
 
 def netstat(includePrograms=True, sourceFiles=_NETSTAT_FILES_TCP):
     """ Returns a list of dictionaries with the following properties:
@@ -109,7 +117,9 @@ def netstat(includePrograms=True, sourceFiles=_NETSTAT_FILES_TCP):
 
     return res
 
-def checkOnce(ports, opts_open=False, opts_kill='dont', opts_killSignal=signal.SIGTERM):
+
+def checkOnce(ports, opts_open=False, opts_kill='dont',
+              opts_killSignal=signal.SIGTERM):
     nstat = netstat()
     errors = []
     messages = []
@@ -149,14 +159,15 @@ def checkOnce(ports, opts_open=False, opts_kill='dont', opts_killSignal=signal.S
                     except OSError as ose:
                         if ose.errno != errno.ESRCH:
                             raise
-    return messages,errors
+    return (messages, errors)
+
 
 def check_port_free(ports, message_printer=None, opts_gracePeriod=0, opts_graceInterval=1, opts_open=False, opts_kill='dont', opts_killSignal=signal.SIGTERM):
     if message_printer is None:
         message_printer = lambda messages: None
     remaining_grace = opts_gracePeriod
     while True:
-        messages,errors = checkOnce(ports, opts_open, opts_kill, opts_killSignal)
+        messages, errors = checkOnce(ports, opts_open, opts_kill, opts_killSignal)
         if messages:
             message_printer(messages)
         if not errors or remaining_grace <= 0:
@@ -195,7 +206,8 @@ def main():
         '-g', '--grace-period',
         dest='gracePeriod', type='float', default=0, metavar='SECONDS',
         help='Seconds to wait for the condition to be fulfilled')
-    parser.add_option('--grace-interval',
+    parser.add_option(
+        '--grace-interval',
         dest='graceInterval', type='float', default=0.5, metavar='SECONDS',
         help='Check every n seconds (default: %default).')
     (opts, args) = parser.parse_args()
@@ -207,7 +219,8 @@ def main():
     message_printer = lambda messages: print('\n'.join(messages))
 
     try:
-        errors = check_port_free(ports, message_printer,
+        errors = check_port_free(
+            ports, message_printer,
             opts_gracePeriod=opts.gracePeriod,
             opts_graceInterval=opts.graceInterval,
             opts_open=opts.open, opts_kill=opts.kill,
@@ -219,4 +232,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
