@@ -196,8 +196,8 @@ def main():
         dest='gracePeriod', type='float', default=0, metavar='SECONDS',
         help='Seconds to wait for the condition to be fulfilled')
     parser.add_option('--grace-interval',
-        dest='graceInterval', type='float', default=1, metavar='SECONDS',
-        help='Check every n seconds')
+        dest='graceInterval', type='float', default=0.5, metavar='SECONDS',
+        help='Check every n seconds (default: %default).')
     (opts, args) = parser.parse_args()
 
     ports = list(map(int, args))
